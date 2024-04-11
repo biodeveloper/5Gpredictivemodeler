@@ -331,5 +331,5 @@ Thank you for your support ❤️
 
 ## 👥 Authors
 
-- [@Anuj Khandelwal](https://www.github.com/anujonthemove)
-- [@Prakhar Agarwal](https://github.com/prakhar19)
+- [@Stefanos Metzidakis](https://github.com/biodeveloper)
+- [@emmanouela Xenou](https://github.com/......)
