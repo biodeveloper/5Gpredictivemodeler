@@ -1,8 +1,9 @@
 {
   "ExpandedNodes": [
     "",
-    "\\scripts"
+    "\\data",
+    "\\scripts",
+    "\\src"
   ],
-  "SelectedNode": "\\scripts\\Data Loading and Exploration.py",
   "PreviewInSolutionExplorer": false
 }
