@@ -1,9 +1,6 @@
 workspace/*
 !.gitkeep
 
-data/**
-!**/
-!.gitkeep
 
 models/**
 !**/
