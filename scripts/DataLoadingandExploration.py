@@ -7,11 +7,12 @@ from scipy.stats import norm  # Import norm from scipy.stats for density curve
 from scipy.stats import gaussian_kde  # Import gaussian_kde for density estimation
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
+from sklearn.model_selection import GridSearchCV, cross_val_score
 #scikit-learn
 import xgboost as xgb
-from sklearn.metrics import mean_squared_error
+from sklearn.metrics import mean_squared_error, r2_score
 import matplotlib.pyplot as plt
-
+import shap
 
 # Get current working directory
 cwd = os.getcwd()
@@ -132,25 +133,61 @@ for feature in numerical_features:
 
 # Data Preprocessing
 # One-hot encode categorical feature "application type"
-X = pd.get_dummies(data, columns=["application_type"])
+# Separate target variable
+y = data['latency(msec)'] 
 
-# Fill missing values with 0 (if any)
+# Drop unnecessary columns (user ID and target variable)
+X = data.drop(['User_ID', 'latency(msec)'], axis=1)
+
+# One-hot encode 'application type'
+X = pd.get_dummies(X, columns=['application_type'])
+
+# Handle missing values (fill with 0)
 X = X.fillna(0)
 
-# Min-Max scaling for features (excluding target)
+# Min-Max scaling for numerical features
 scaler = MinMaxScaler()
-X_train_scaled = scaler.fit_transform(X_train)
-X_test_scaled = scaler.transform(X_test)  # Use the same scaler fitted on training data
+numerical_cols = X.select_dtypes(include=['float64', 'int64']).columns
+X[numerical_cols] = scaler.fit_transform(X[numerical_cols])
+
+# Now we have X (preprocessed features) and y (target variable) ready for model training
+# XGBoost Regressor with Hyperparameter Tuning and SHAP
+
+# Define parameter grid for GridSearchCV
+param_grid = {
+    'max_depth': [3, 5, 7],
+    'learning_rate': [0.1, 0.01, 0.001],
+    'n_estimators': [100, 500, 1000],
+    'colsample_bytree': [0.5, 0.8, 1.0]
+}
 
 # Create XGBoost regressor model
-xgb_model = xgb.XGBRegressor(objective="reg:squarederror", random_state=42)  # Objective remains the same
+xgb_model = xgb.XGBRegressor(objective='reg:squarederror', random_state=42)
 
-# Train the model
-xgb_model.fit(X_train, y_train)
+# Perform GridSearchCV with 10-fold cross-validation
+grid_search = GridSearchCV(xgb_model, param_grid, cv=10, scoring='neg_mean_squared_error')
+grid_search.fit(X, y)
 
-# Predict on test set
-y_pred = xgb_model.predict(X_test)
+# Get the best model and its performance
+best_model = grid_search.best_estimator_
+best_params = grid_search.best_params_
+best_score = grid_search.best_score_
 
-# Evaluate model performance
-mse = mean_squared_error(y_test, y_pred)
-print("Mean Squared Error:", mse)
+print("Best Hyperparameters:", best_params)
+print("Best Cross-Validation Score (RMSE):", (-best_score)**0.5)  # Convert from negative MSE
+
+# Evaluate model performance on the training set
+y_pred = best_model.predict(X)
+mse = mean_squared_error(y, y_pred)
+r2 = r2_score(y, y_pred)
+
+print("Training MSE:", mse)
+print("Training R^2:", r2)
+
+# SHAP Analysis for Feature Importance
+explainer = shap.Explainer(best_model)
+shap_values = explainer(X)
+
+# Visualize feature importance
+shap.plots.bar(shap_values)
+shap.summary_plot(shap_values, X)
