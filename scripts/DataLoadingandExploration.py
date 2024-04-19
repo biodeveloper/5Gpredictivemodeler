@@ -4,6 +4,7 @@ import os
 import pandas as pd
 import numpy as np
 from scipy.stats import norm  # Import norm from scipy.stats for density curve
+from scipy.stats import gaussian_kde  # Import gaussian_kde for density estimation
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
 #scikit-learn
@@ -106,27 +107,28 @@ plt.savefig(save_path, dpi=300)  # Save with 300 DPI for higher resolution
 # Histograms for numerical features
 # Histograms with density lines and legend
 # Separate histograms with density lines and legend
-numerical_features = ["signal_strength(dBm)", "latency(msec)", "required_bandwidth(Mbps)", "allocated_bandwidth(Mbps)","resource_allocation"]
+numerical_features = ["signal_strength(dBm)", "latency(msec)", "required_bandwidth(Mbps)", "allocated_bandwidth(Mbps)", "resource_allocation"]
 
 for feature in numerical_features:
-    plt.figure(figsize=(8, 6))  # Adjust figure size as needed
-    data[feature].hist(bins=10, density=True, edgecolor='black')  # Added edgecolor for better visualization
+    plt.figure(figsize=(8, 6))
+    data[feature].hist(bins=10, density=True, edgecolor='black')
 
-    # Calculate and plot density curve
-    mu, sigma = data[feature].mean(), data[feature].std()
-    x = np.linspace(mu - 3*sigma, mu + 3*sigma, 100)
-    plt.plot(x, norm.pdf(x, mu, sigma), color='red', linewidth=2, label=f"$\mu \pm \sigma = {mu:.2f} \pm {sigma:.2f}$")
+    # Calculate and plot density curve using KDE
+    density = gaussian_kde(data[feature])
+    x = np.linspace(data[feature].min(), data[feature].max(), 200)  # More points for smoother curve
+    plt.plot(x, density(x), color='red', linewidth=2, label="Εκτιμώμενη Κατανομή")
     
     plt.legend()
-    plt.title(f"Κατανομή της Μεταβλητής '{feature}'", fontsize=14)  # Increased title font size
-    plt.xlabel(feature, fontsize=12)  # Increased label font size
-    plt.ylabel("Πυκνότητα", fontsize=12)  # Increased label font size
-    plt.grid(True)  # Added grid for better readability
+    plt.title(f"Κατανομή της Μεταβλητής '{feature}'", fontsize=14)
+    plt.xlabel(feature, fontsize=12)
+    plt.ylabel("Πυκνότητα", fontsize=12)
+    plt.grid(True)
+
     # Save plot to PNG file
     save_path = os.path.join(file_path2, f"{feature}_histogram.png")
-    plt.savefig(save_path, dpi=300)  # Save with 300 DPI for higher resolution
+    plt.savefig(save_path, dpi=300)
 
-    #plt.show()
+#    plt.show() 
 
 # Data Preprocessing
 # One-hot encode categorical feature "application type"
