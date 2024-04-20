@@ -1,4 +1,5 @@
 
+
 #Data Loading and Exploration
 import os
 import pandas as pd
@@ -16,7 +17,7 @@ import shap
 
 # Get current working directory
 cwd = os.getcwd()
-
+print("current working directory path:", cwd)
 
 # Construct file path
 file_path = os.path.join(cwd, "data\QualityOfService5GDataset-3.csv")
