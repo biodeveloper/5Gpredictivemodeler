@@ -36,7 +36,7 @@ try:
     data = pd.read_csv(file_path, dtype={'User_ID': 'string',  # Specify integer for User_ID
                               'application_type': 'string',  # Specify category for application type
                               'signal_strength(dBm)': 'float64',  # Specify float for signal strength
-                              'latency(ms)': 'int64',  # Specify float for latency
+                              'latency(msec)': 'int64',  # Specify float for latency
                               'required_bandwidth(Mbps)': 'int64',  # Specify float for bandwidth
                               'allocated_bandwidth(Mbps)': 'int64',  # Specify float for allocated bandwidth
                               'resource_allocation': 'int64'})
@@ -47,7 +47,7 @@ except pd.errors.ParserError:
         data = pd.read_csv(file_path, engine="python", dtype={'User_ID': 'string',  # Specify integer for User_ID
                               'application_type': 'string',  # Specify category for application type
                               'signal_strength(dBm)': 'float64',  # Specify float for signal strength
-                              'latency(ms)': 'int64',  # Specify float for latency
+                              'latency(msec)': 'int64',  # Specify float for latency
                               'required_bandwidth(Mbps)': 'int64',  # Specify float for bandwidth
                               'allocated_bandwidth(Mbps)': 'int64',  # Specify float for allocated bandwidth
                               'resource_allocation': 'int64'})  # Use Python's built-in parser
@@ -58,7 +58,7 @@ except pd.errors.ParserError:
             data = pd.read_csv(file_path, sep=";", engine="python", dtype={'User_ID': 'string',  # Specify integer for User_ID
                               'application_type': 'string',  # Specify category for application type
                               'signal_strength(dBm)': 'float64',  # Specify float for signal strength
-                              'latency(ms)': 'int64',  # Specify float for latency
+                              'latency(msec)': 'int64',  # Specify float for latency
                               'required_bandwidth(Mbps)': 'int64',  # Specify float for bandwidth
                               'allocated_bandwidth(Mbps)': 'int64',  # Specify float for allocated bandwidth
                               'resource_allocation': 'int64'})  # Try semicolon delimiter
@@ -87,9 +87,9 @@ data.isnull().sum()
 
 #Data Visualization
 # Create directory for graphs if it doesn't exist
-file_path2 = os.path.join(cwd, "graphs")
-if not os.path.exists(file_path2):
-    os.makedirs(file_path2)
+graph_path = os.path.join(cwd, "graphs")
+if not os.path.exists(graph_path):
+    os.makedirs(graph_path)
 
 
 # Pie chart for application type distribution with counts and percentages
@@ -102,7 +102,7 @@ plt.pie(app_counts.values, labels=app_counts.index, autopct=lambda p: f"{p*sum(a
 # autopct: Ορίζουμε μια συνάρτηση για τη μορφοποίηση των ετικετών ποσοστού και αριθμού
 plt.title("Distribution of Application Types") # Τίτλος του γραφήματος
 # Save plot to PNG file
-save_path = os.path.join(file_path2, f"application_types_piechartplot.png")
+save_path = os.path.join(graph_path, f"application_types_piechartplot.png")
 plt.savefig(save_path, dpi=300)  # Save with 300 DPI for higher resolution
 #plt.show() # Εμφανίζουμε το γράφημα
 
@@ -127,7 +127,8 @@ for feature in numerical_features:
     plt.grid(True)
 
     # Save plot to PNG file
-    save_path = os.path.join(file_path2, f"{feature}_histogram.png")
+    #if file exists, overwrite it
+    save_path = os.path.join(graph_path, f"{feature}_histogram.png")
     plt.savefig(save_path, dpi=300)
 
 #    plt.show() 
