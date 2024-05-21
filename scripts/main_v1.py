@@ -3,15 +3,12 @@ import os
 import pandas as pd
 import numpy as np
 from scipy.stats import gaussian_kde  # Import gaussian_kde for density estimation
-from sklearn.model_selection import train_test_split, GridSearchCV, cross_val_score
+from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
-# scikit-learn models
+from sklearn.model_selection import GridSearchCV
+# scikit-learn
 import xgboost as xgb
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.neural_network import MLPRegressor
-# metrics
-from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_percentage_error
-# visualization and interpretability
+from sklearn.metrics import mean_squared_error, r2_score
 import matplotlib.pyplot as plt
 import shap
 
@@ -28,7 +25,6 @@ if os.path.isfile(data_path):
     print("Data file exists.")
 else:
     print("Data file does not exist.")
-
 
 # Load data from CSV file with error handling and type specification
 try:
@@ -98,94 +94,68 @@ for feature in numerical_features:
     plt.grid(True)
     plt.savefig(os.path.join(graph_path, f"{feature}_histogram.png"), dpi=300)
 
+
 # Data Preprocessing
 y = data['latency(msec)'] 
+
 X = data.drop(['User_ID', 'latency(msec)'], axis=1)
+
+# One-hot encode 'application type'
 X = pd.get_dummies(X, columns=['application_type'])
+
+# Handle missing values (fill with 0)
 X = X.fillna(0)
+
+# Min-Max scaling for numerical features
 scaler = MinMaxScaler()
 numerical_cols = X.select_dtypes(include=['float64', 'int64']).columns
 X[numerical_cols] = scaler.fit_transform(X[numerical_cols])
 
-# Split data into train and test sets
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-# --- Model Training and Evaluation ---
-models = {
-    "XGBoost": xgb.XGBRegressor(objective='reg:squarederror', random_state=42),
-    "Random Forest": RandomForestRegressor(random_state=42),
-    "Neural Network": MLPRegressor(random_state=42, max_iter=500)  # Increase max_iter for NN
+# XGBoost Regressor with Hyperparameter Tuning and SHAP
+param_grid = {
+    'max_depth': [3, 5, 7],
+    'learning_rate': [0.1, 0.01, 0.001],
+    'n_estimators': [100, 500, 1000],
+    'colsample_bytree': [0.5, 0.8, 1.0]
 }
 
-param_grids = {
-    "XGBoost": {
-        'max_depth': [3, 5, 7],
-        'learning_rate': [0.1, 0.01, 0.001],
-        'n_estimators': [100, 500, 1000],
-        'colsample_bytree': [0.5, 0.8, 1.0]
-    },
-    "Random Forest": {
-        'n_estimators': [100, 500, 1000],
-        'max_depth': [None, 5, 10],
-        'min_samples_split': [2, 5, 10]
-    },
-    "Neural Network": {
-        'hidden_layer_sizes': [(50,), (100,), (50, 50)],
-        'activation': ['relu', 'tanh'],
-        'alpha': [0.0001, 0.001, 0.01]
-    }
-}
+xgb_model = xgb.XGBRegressor(objective='reg:squarederror', random_state=42)
 
-results = {}
+grid_search = GridSearchCV(xgb_model, param_grid, cv=10, scoring='neg_mean_squared_error')
+grid_search.fit(X, y)
 
-for model_name, model in models.items():
-    print(f"--- Training {model_name} ---")
-    
-    # Hyperparameter Tuning with GridSearchCV
-    grid_search = GridSearchCV(model, param_grids[model_name], cv=10, scoring='neg_mean_squared_error')
-    grid_search.fit(X_train, y_train)
-    
-    # Get the best model
-    best_model = grid_search.best_estimator_
+best_model = grid_search.best_estimator_
+best_params = grid_search.best_params_
+best_score = grid_search.best_score_
 
-    # Evaluate on test set
-    y_pred = best_model.predict(X_test)
-    
-    rmse = mean_squared_error(y_test, y_pred, squared=False)
-    mape = mean_absolute_percentage_error(y_test, y_pred)
-    r2 = r2_score(y_test, y_pred)
-    
-    results[model_name] = {"RMSE": rmse, "MAPE": mape, "R^2": r2, "Best Model": best_model}
-    
-    print(f"Best Parameters: {grid_search.best_params_}")
-    print(f"RMSE: {rmse:.2f}")
-    print(f"MAPE: {mape:.2f}")
-    print(f"R^2: {r2:.2f}\n")
+# Evaluate model performance on the training set
+y_pred = best_model.predict(X)
+mse = mean_squared_error(y, y_pred)
+r2 = r2_score(y, y_pred)
 
-    # --- SHAP Analysis ---
-    explainer = shap.Explainer(best_model)
-    shap_values = explainer(X_test)
+# Create legend text for best parameters and metrics
+legend_text = (f"Best Hyperparameters: {best_params}\n"
+               f"Best Cross-Validation Score (RMSE): {(-best_score)**0.5:.2f}\n"
+               f"Training MSE: {mse:.2f}\n"
+               f"Training R^2: {r2:.2f}")
 
-    # Visualize feature importance with legend
-    plt.figure(figsize=(12, 6))
-    shap.plots.bar(shap_values, show=False)
-    plt.title(f"SHAP Feature Importance - {model_name}")
-    plt.tight_layout()
-    plt.savefig(os.path.join(graph_path, f"shap_bar_plot_{model_name}.png"), dpi=300)
-    plt.show()
+# SHAP Analysis for Feature Importance
+explainer = shap.Explainer(best_model)
+shap_values = explainer(X)
 
-    plt.figure(figsize=(12, 6))
-    shap.summary_plot(shap_values, X_test, show=False)
-    plt.title(f"SHAP Summary Plot - {model_name}")
-    plt.tight_layout()
-    plt.savefig(os.path.join(graph_path, f"shap_summary_plot_{model_name}.png"), dpi=300)
-    plt.show() 
+# Visualize SHAP Bar Plot with legend
+plt.figure(figsize=(12, 6))
+shap.plots.bar(shap_values, show=False)
+plt.legend([legend_text], loc='lower center', bbox_to_anchor=(0.5, -0.3), ncol=2)
+plt.tight_layout()
+plt.savefig(os.path.join(graph_path, "shap_bar_plot_with_legend.png"), dpi=300)
+plt.show()
 
-
-# --- Model Comparison ---
-print("--- Model Comparison ---")
-for model_name, metrics in results.items():
-    print(f"{model_name}:")
-    print(f"  RMSE: {metrics['RMSE']:.2f}")
-    print(f"  MAPE: {metrics['MAPE']:.2f}")
-    print(f"  R^2: {metrics['R^2']:.2f}")
+# Visualize SHAP Summary Plot with legend
+plt.figure(figsize=(12, 6))
+shap.summary_plot(shap_values, X, show=False)
+plt.legend([legend_text], loc='lower center', bbox_to_anchor=(0.5, -0.3), ncol=2)
+plt.tight_layout()
+plt.savefig(os.path.join(graph_path, "shap_summary_plot_with_legend.png"), dpi=300)
+plt.show()
