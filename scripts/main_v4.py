@@ -34,6 +34,7 @@ if os.path.isfile(data_path):
 else:
     print("Data file does not exist.")
 
+
 # Load data from CSV file with error handling and type specification
 try:
     data = pd.read_csv(data_path, dtype={'User_ID': 'string', 
@@ -117,7 +118,6 @@ X[numerical_cols] = scaler.fit_transform(X[numerical_cols])
 # Split data into train and test sets
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-
 # --- Database Connection and Setup ---
 try:
     # Connect without specifying the database initially
@@ -141,8 +141,7 @@ try:
     # Now select the database
     mydb.database = "5Gpredictivemodeler"  
 
-
-    # Create table for model results (with 'plot_data' column)
+    # Create table for model results
     mycursor.execute("""
     CREATE TABLE IF NOT EXISTS model_results (
         model_name VARCHAR(255) PRIMARY KEY,
@@ -152,15 +151,14 @@ try:
         test_mse FLOAT,
         test_r2 FLOAT,
         test_rmse FLOAT,
-        all_parameters TEXT,
-        plot_data TEXT  -- Add the plot_data column here
+        all_parameters TEXT
     )
     """)
 
 except mysql.connector.Error as err:
     print(f"Database error: {err}")
     exit(1)
-  
+
 # --- Model Selection from Terminal ---
 while True:
     model_choice = input("Choose a regression model (1-XGBoost, 2-Random Forest, 3-Neural Network): ")
@@ -222,50 +220,38 @@ mse = mean_squared_error(y_test, y_pred)  # Calculate MSE on the test set
 mape = mean_absolute_percentage_error(y_test, y_pred)
 r2 = r2_score(y_test, y_pred)
 
+
+# --- Store Results in Database ---
+try:
+    all_params = best_model.get_params()  # Get all parameters of the best model
+    sql = """
+    REPLACE INTO model_results (model_name, timestamp, best_parameters, cross_val_rmse, 
+                               test_mse, test_r2, test_rmse, all_parameters) 
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+    """
+
+    val = (model_name, datetime.datetime.now(), str(grid_search.best_params_), (-best_score)**0.5, 
+           mse, r2, rmse, str(all_params))
+
+    mycursor.execute(sql, val)
+    mydb.commit()
+
+    print("Model results saved to database.")
+
+except mysql.connector.Error as err:
+    print(f"Database error: {err}")
+
+
+# --- SHAP Analysis ---
+explainer = shap.Explainer(best_model)
+shap_values = explainer(X_test)
+
 # Create legend text for best parameters and metrics
 legend_text = (f"Best Hyperparameters: {grid_search.best_params_}\n"
                f"Best Cross-Validation Score (RMSE): {(-best_score)**0.5:.2f}\n" # RMSE from cross-validation
                f"Training MSE: {mse:.2f}\n"
                f"Training R^2: {r2:.2f}\n"
                f"RMSE: {rmse:.2f}")  # RMSE on the test set
-
-# --- SHAP Analysis ---
-explainer = shap.Explainer(best_model)
-shap_values = explainer(X_test)
-
-# --- Store Results and Plot Data in Database ---
-try:
-    all_params = best_model.get_params()  # Get all parameters of the best model
-
-    # --- Store Plot Data in Database ---
-    plot_data = {}
-
-    # ... (Code for collecting plot data for pie chart, histograms, and SHAP remains the same)
-
-    # Store plot data as JSON string
-    plot_data_json = json.dumps(plot_data)  # Move this line before defining 'val'
-
-    # SQL statement to insert or update model results
-    sql = """
-    REPLACE INTO model_results (model_name, timestamp, best_parameters, cross_val_rmse, 
-                               test_mse, test_r2, test_rmse, all_parameters, plot_data) 
-    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-    """
-
-    val = (model_name, datetime.datetime.now(), str(grid_search.best_params_), (-best_score)**0.5, 
-           mse, r2, rmse, str(all_params), plot_data_json)  # Now plot_data_json is defined
-
-    mycursor.execute(sql, val)
-    mydb.commit()
-
-    print("Model results and plot data saved to database.")
-
-except mysql.connector.Error as err:
-    print(f"Database error: {err}")
-
-
-
-
 
 # --- Visualize SHAP Bar Plot with legend ---
 plt.figure(figsize=(12, 6))
