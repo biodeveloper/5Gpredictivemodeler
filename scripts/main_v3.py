@@ -10,13 +10,11 @@ import xgboost as xgb
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.neural_network import MLPRegressor
 # metrics
-from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_percentage_error, root_mean_squared_error
+from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_percentage_error, root_mean_squared_error  # Import RMSE
 # visualization and interpretability
 import matplotlib.pyplot as plt
 import shap
 import datetime  # Import datetime for timestamp
-# database connection
-import mysql.connector
 
 # Get current working directory
 cwd = os.getcwd()
@@ -24,8 +22,7 @@ print("Current working directory path:", cwd)
 
 # Construct file paths
 data_path = os.path.join(cwd, "data", "QualityOfService5GDataset-3.csv")  # Path to data file
-graph_path = os.path.join(cwd, "graphs")  # Path to graphs directory
-db_path = os.path.join(cwd, "data", "5Gpredictivemodeler.db")  # Path to database file
+graph_path = os.path.join(cwd, "graphs") # Path to graphs directory
 
 # Check if data file exists
 if os.path.isfile(data_path):
@@ -117,47 +114,6 @@ X[numerical_cols] = scaler.fit_transform(X[numerical_cols])
 # Split data into train and test sets
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-# --- Database Connection and Setup ---
-try:
-    # Connect without specifying the database initially
-    mydb = mysql.connector.connect(
-        host="localhost",
-        user="5gpred",  # Replace with your MySQL username
-        password="wyw5445hkwjb@y7^"  # Replace with your MySQL password
-    )
-
-    mycursor = mydb.cursor()
-
-    # Check if the database exists
-    mycursor.execute("SHOW DATABASES LIKE '5Gpredictivemodeler'")
-    database_exists = mycursor.fetchone()
-
-    # Create the database only if it doesn't exist
-    if not database_exists:
-        mycursor.execute("CREATE DATABASE 5Gpredictivemodeler")
-        print("Database '5Gpredictivemodeler' created.")
-
-    # Now select the database
-    mydb.database = "5Gpredictivemodeler"  
-
-    # Create table for model results
-    mycursor.execute("""
-    CREATE TABLE IF NOT EXISTS model_results (
-        model_name VARCHAR(255) PRIMARY KEY,
-        timestamp DATETIME,
-        best_parameters TEXT,
-        cross_val_rmse FLOAT,
-        test_mse FLOAT,
-        test_r2 FLOAT,
-        test_rmse FLOAT,
-        all_parameters TEXT
-    )
-    """)
-
-except mysql.connector.Error as err:
-    print(f"Database error: {err}")
-    exit(1)
-
 # --- Model Selection from Terminal ---
 while True:
     model_choice = input("Choose a regression model (1-XGBoost, 2-Random Forest, 3-Neural Network): ")
@@ -218,28 +174,6 @@ rmse = root_mean_squared_error(y_test, y_pred)  # Calculate RMSE on the test set
 mse = mean_squared_error(y_test, y_pred)  # Calculate MSE on the test set
 mape = mean_absolute_percentage_error(y_test, y_pred)
 r2 = r2_score(y_test, y_pred)
-
-
-# --- Store Results in Database ---
-try:
-    all_params = best_model.get_params()  # Get all parameters of the best model
-    sql = """
-    REPLACE INTO model_results (model_name, timestamp, best_parameters, cross_val_rmse, 
-                               test_mse, test_r2, test_rmse, all_parameters) 
-    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-    """
-
-    val = (model_name, datetime.datetime.now(), str(grid_search.best_params_), (-best_score)**0.5, 
-           mse, r2, rmse, str(all_params))
-
-    mycursor.execute(sql, val)
-    mydb.commit()
-
-    print("Model results saved to database.")
-
-except mysql.connector.Error as err:
-    print(f"Database error: {err}")
-
 
 # --- SHAP Analysis ---
 explainer = shap.Explainer(best_model)
