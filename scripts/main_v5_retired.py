@@ -142,7 +142,7 @@ try:
     mydb.database = "5Gpredictivemodeler"  
 
 
-    # Create table for model results (with 'plot_data' and 'X_test_columns' columns)
+    # Create table for model results (with 'plot_data' column)
     mycursor.execute("""
     CREATE TABLE IF NOT EXISTS model_results (
         model_name VARCHAR(255) PRIMARY KEY,
@@ -153,8 +153,7 @@ try:
         test_r2 FLOAT,
         test_rmse FLOAT,
         all_parameters TEXT,
-        plot_data TEXT,
-        X_test_columns TEXT  -- Add the X_test_columns column here
+        plot_data TEXT  -- Add the plot_data column here
     )
     """)
 
@@ -234,6 +233,39 @@ legend_text = (f"Best Hyperparameters: {grid_search.best_params_}\n"
 explainer = shap.Explainer(best_model)
 shap_values = explainer(X_test)
 
+# --- Store Results and Plot Data in Database ---
+try:
+    all_params = best_model.get_params()  # Get all parameters of the best model
+
+    # --- Store Plot Data in Database ---
+    plot_data = {}
+
+    # ... (Code for collecting plot data for pie chart, histograms, and SHAP remains the same)
+
+    # Store plot data as JSON string
+    plot_data_json = json.dumps(plot_data)  # Move this line before defining 'val'
+
+    # SQL statement to insert or update model results
+    sql = """
+    REPLACE INTO model_results (model_name, timestamp, best_parameters, cross_val_rmse, 
+                               test_mse, test_r2, test_rmse, all_parameters, plot_data) 
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+    """
+
+    val = (model_name, datetime.datetime.now(), str(grid_search.best_params_), (-best_score)**0.5, 
+           mse, r2, rmse, str(all_params), plot_data_json)  # Now plot_data_json is defined
+
+    mycursor.execute(sql, val)
+    mydb.commit()
+
+    print("Model results and plot data saved to database.")
+
+except mysql.connector.Error as err:
+    print(f"Database error: {err}")
+
+
+
+
 
 # --- Visualize SHAP Bar Plot with legend ---
 plt.figure(figsize=(12, 6))
@@ -260,45 +292,3 @@ plt.subplots_adjust(bottom=0.3)  # Increase bottom margin
 plt.figtext(0.5, 0.01, legend_text, ha="center", fontsize=10, bbox={"facecolor":"lightblue", "alpha":0.5, "pad":5})
 plt.savefig(os.path.join(graph_path, f"shap_summary_plot_{model_name}_{timestamp}.png"), dpi=300)
 plt.show()
-
-# --- Store Results and Plot Data in Database ---
-try:
-    all_params = best_model.get_params()  # Get all parameters of the best model
-
-    # --- Store Plot Data in Database ---
-    plot_data = {}
-
-    # ... (Code for collecting plot data for pie chart, histograms, and SHAP remains the same)
-    # 3. SHAP Data (Stored as lists after SHAP calculation)
-    plot_data["shap_bar"] = shap_values.values.tolist() 
-    plot_data["shap_summary"] = shap_values.data.tolist()
-    plot_data["shap_base_values"] = shap_values.base_values.tolist()
-    
-    # Convert dictionaries to JSON strings before storing
-    best_params_json = json.dumps(grid_search.best_params_) 
-    all_params_json = json.dumps(all_params)
-
-    # Store plot data as JSON string
-    plot_data_json = json.dumps(plot_data)
-    
-    # Store X_test column names as JSON
-    X_test_columns_json = json.dumps(X_test.columns.tolist())
-
-    # SQL statement to insert or update model results (Corrected)
-    sql = """
-    REPLACE INTO model_results (model_name, timestamp, best_parameters, cross_val_rmse, 
-                               test_mse, test_r2, test_rmse, all_parameters, plot_data, X_test_columns) 
-    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-    """
-
-    val = (model_name, datetime.datetime.now(), best_params_json, (-best_score)**0.5, 
-           mse, r2, rmse, all_params_json, plot_data_json, X_test_columns_json) 
-
-    mycursor.execute(sql, val)
-    mydb.commit()
-
-    print("Model results and plot data saved to database.")
-
-except mysql.connector.Error as err:
-    print(f"Database error: {err}")
-
