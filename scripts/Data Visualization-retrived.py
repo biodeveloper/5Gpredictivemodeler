@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import mysql.connector
 import shap
 import numpy as np
+from matplotlib.colors import ListedColormap
 
 # Get current working directory
 cwd = os.getcwd()
@@ -44,81 +45,70 @@ for model_name in model_names:
             "test_rmse": result[6],
             "all_parameters": json.loads(result[7]),
             "plot_data": json.loads(result[8]),
-            "X_test_columns": json.loads(result[9])
+            "X_test_columns": json.loads(result[9])  # Retrieve feature names
         }
 
-# --- 1. Combined SHAP Bar Plot (Replicating Main Code's Style) ---
-
-# Determine the order of features from the database
-feature_order = results["XGBoost"]["X_test_columns"] 
-# Assuming the order is consistent between models
-
+# --- 1. Combined SHAP Bar Plot ---
 plt.figure(figsize=(12, 6))
+
+bar_width = 0.35
+feature_indices = np.arange(len(results["XGBoost"]["X_test_columns"]))
 
 for i, model_name in enumerate(model_names):
     shap_values = np.array(results[model_name]["plot_data"]["shap_bar"])
-    base_values = np.array(results[model_name]["plot_data"].get("shap_base_values", 0))
+    base_values = np.array(results[model_name]["plot_data"].get("shap_base_values", 0)) 
     shap_explanation = shap.Explanation(
         values=shap_values,
         base_values=base_values,
         data=results[model_name]["plot_data"]["shap_summary"],
         feature_names=results[model_name]["X_test_columns"]
     )
+    
+    plt.bar(feature_indices + i * bar_width, shap_explanation.values.mean(0), 
+            bar_width, label=model_name)
 
-    # Get the mean absolute SHAP values for sorting
-    mean_abs_shap_values = np.abs(shap_explanation.values).mean(0)
+plt.xlabel("Features")
+plt.ylabel("Mean SHAP Value")
+plt.title("SHAP Feature Importance - XGBoost vs. Random Forest")
+plt.xticks(feature_indices + bar_width / 2, results["XGBoost"]["X_test_columns"], rotation=45, ha="right") 
+plt.legend()
 
-    # Sort features based on mean absolute SHAP values
-    sorted_features_indices = np.argsort(mean_abs_shap_values)[::-1]  # Descending order
-    sorted_features = [results[model_name]["X_test_columns"][idx] for idx in sorted_features_indices]
-    sorted_shap_values = shap_explanation.values[:, sorted_features_indices]
+# Adjust layout for legend
+plt.subplots_adjust(bottom=0.3)
 
-    # Convert sorted_features_indices to a list
-    sorted_features_indices = list(sorted_features_indices)  # Convert tuple to list
+# Add legend with model details
+legend_text = [f"{model_name}:\n"
+               f"  Best Parameters: {results[model_name]['best_parameters']}\n"
+               f"  Cross-Val RMSE: {results[model_name]['cross_val_rmse']:.2f}\n"
+               f"  Test MSE: {results[model_name]['test_mse']:.2f}\n"
+               f"  Test R^2: {results[model_name]['test_r2']:.2f}\n"
+               f"  Test RMSE: {results[model_name]['test_rmse']:.2f}"
+               for model_name in model_names]
+plt.figtext(0.5, 0.01, "\n".join(legend_text), ha="center", fontsize=10, 
+            bbox={"facecolor": "lightblue", "alpha": 0.5, "pad": 5})
 
-    # Create a new Explanation object with sorted data
-    sorted_shap_explanation = shap.Explanation(
-        values=sorted_shap_values,
-        base_values=shap_explanation.base_values,
-        data=shap_explanation.data[:, sorted_features_indices],  # Now uses a list for indexing
-        feature_names=sorted_features
-    )
-
-    # Plot the bar plot for the current model
-    shap.plots.bar(sorted_shap_explanation, show=False)
-    plt.title(f"SHAP Feature Importance - {model_name}")
-
-    # Adjust layout for legend
-    plt.subplots_adjust(bottom=0.3)
-
-    # Add legend with model details below the plot
-    legend_text = (f"Best Hyperparameters: {results[model_name]['best_parameters']}\n"
-                   f"Best Cross-Validation Score (RMSE): {results[model_name]['cross_val_rmse']:.2f}\n"
-                   f"Training MSE: {results[model_name]['test_mse']:.2f}\n"
-                   f"Training R^2: {results[model_name]['test_r2']:.2f}\n"
-                   f"RMSE: {results[model_name]['test_rmse']:.2f}")
-    plt.figtext(0.5, 0.01, legend_text, ha="center", fontsize=10,
-                bbox={"facecolor": "lightblue", "alpha": 0.5, "pad": 5})
-
-    plt.savefig(os.path.join(graph_path, f"combined_shap_bar_plot_{model_name}_{timestamp}.png"), dpi=300)
-    plt.show()
+timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+plt.savefig(os.path.join(graph_path, f"combined_shap_bar_plot_{timestamp}.png"), dpi=300)
+plt.show()
 
 # --- 2. Combined SHAP Summary Plot ---
-
 plt.figure(figsize=(12, 6))
 
-# Define colors for each model (blue for XGBoost, red for Random Forest)
-model_colors = ["blue", "red"]
+# Define colors for each model
+model_colors = ["blue", "red"]  
 
-# Get the list of features (assuming both models have the same features)
+# Get the list of features 
 features = results["XGBoost"]["X_test_columns"]
 
-# Calculate the required height for the plot based on the number of features and models
-plot_height = 0.8 + (len(features) * len(model_names) * 0.2)  # Adjusted height calculation
+# Calculate the required height for the plot 
+plot_height = 0.8 + (len(features) * len(model_names) * 0.3) 
 
-# Adjust the figure height accordingly
+# Adjust the figure height 
 plt.figure(figsize=(12, plot_height))
 
+# Combine SHAP values and data for both models
+all_shap_values = []
+all_shap_data = []
 for i, model_name in enumerate(model_names):
     shap_values = np.array(results[model_name]["plot_data"]["shap_bar"])
     base_values = np.array(results[model_name]["plot_data"].get("shap_base_values", 0))
@@ -128,17 +118,26 @@ for i, model_name in enumerate(model_names):
         data=results[model_name]["plot_data"]["shap_summary"],
         feature_names=features
     )
+    all_shap_values.append(shap_explanation.values)
+    all_shap_data.append(shap_explanation.data)
 
-    # Create the SHAP summary plot with the specified color
-    shap.summary_plot(shap_explanation, show=False, color=model_colors[i], sort=False)
+# Create the combined SHAP summary plot with layered violin plots
+for i, model_name in enumerate(model_names):
+    shap.summary_plot(
+        all_shap_values[i], 
+        all_shap_data[i],
+        feature_names=features, 
+        plot_type="layered_violin", 
+        color=model_colors[i],  # Use color from model_colors list
+        show=False
+    )
 
-plt.title("SHAP Summary Plot - XGBoost VS. Random Forest")  # Updated title
+plt.title("SHAP Summary Plot - XGBoost vs. Random Forest")
 
 # Adjust layout for legend
-plt.subplots_adjust(bottom=0.2)  # Adjusted bottom margin
+plt.subplots_adjust(bottom=0.3) 
 
-# Add legend with model details
-plt.figtext(0.5, 0.01, "\n".join(legend_text), ha="center", fontsize=10,
+plt.figtext(0.5, 0.01, "\n".join(legend_text), ha="center", fontsize=10, 
             bbox={"facecolor": "lightblue", "alpha": 0.5, "pad": 5})
 
 plt.savefig(os.path.join(graph_path, f"combined_shap_summary_plot_{timestamp}.png"), dpi=300)
@@ -162,4 +161,3 @@ plt.legend()
 plt.tight_layout()
 plt.savefig(os.path.join(graph_path, f"model_performance_comparison_{timestamp}.png"), dpi=300)
 plt.show()
-
